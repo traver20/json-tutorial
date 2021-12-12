@@ -1,3 +1,8 @@
+#ifdef _WINDOWS
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+#endif
+
 #include "leptjson.h"
 #include <assert.h>  /* assert() */
 #include <errno.h>   /* errno, ERANGE */
@@ -102,8 +107,48 @@ static int lept_parse_string(lept_context* c, lept_value* v) {
             case '\0':
                 c->top = head;
                 return LEPT_PARSE_MISS_QUOTATION_MARK;
+            case '\\':
+            {
+                char nxt = *p++;
+                switch (nxt)
+                {
+                case 'b':
+                    PUTC(c, '\b');
+                    break;
+                case 'n':
+                    PUTC(c, '\n');
+                    break;
+                case 't':
+                    PUTC(c, '\t');
+                    break;
+                case 'f':
+                    PUTC(c, '\f');
+                    break;
+                case 'r':
+                    PUTC(c, '\r');
+                    break;
+                case '\\':
+                case '/':
+                case '\"':
+                    PUTC(c, nxt);
+                    break;
+                default:
+                    c->top = head;
+                    return LEPT_PARSE_INVALID_STRING_ESCAPE;
+                    break;
+                }
+                break;
+            }
             default:
-                PUTC(c, ch);
+                if (ch >= 0x20 && ch <= 0x21 || ch >= 0x23 && ch <= 0x5B || ch >= 0x5D && ch <= 0x10FFFF)
+                {
+                    PUTC(c, ch);
+                }
+                else
+                {
+                    c->top = head;
+                    return LEPT_PARSE_INVALID_STRING_CHAR;
+                }
         }
     }
 }
@@ -154,11 +199,34 @@ lept_type lept_get_type(const lept_value* v) {
 
 int lept_get_boolean(const lept_value* v) {
     /* \TODO */
+    assert(v != NULL && (v->type == LEPT_TRUE || v->type == LEPT_FALSE));
+    if (v->type == LEPT_TRUE)
+        return 1;
     return 0;
 }
 
 void lept_set_boolean(lept_value* v, int b) {
     /* \TODO */
+    assert(v != NULL);
+    lept_free(v);
+    /*size_t len = 0;
+    if (b)
+    {
+        len = 4;
+        v->u.s.s = (char*)malloc(len+1);
+        memcpy(v->u.s.s, "true", len);
+        v->type = LEPT_TRUE;
+    }
+    else
+    {
+        len = 5;
+        v->u.s.s = (char*)malloc(len + 1);
+        memcpy(v->u.s.s, "false", len);
+        v->type = LEPT_FALSE;
+    }
+    v->u.s.s[len] = '\0';
+    v->u.s.len = len;*/
+    v->type = b ? LEPT_TRUE : LEPT_FALSE;
 }
 
 double lept_get_number(const lept_value* v) {
@@ -168,6 +236,10 @@ double lept_get_number(const lept_value* v) {
 
 void lept_set_number(lept_value* v, double n) {
     /* \TODO */
+    assert(v != NULL);
+    lept_free(v);
+    v->u.n = n;
+    v->type = LEPT_NUMBER;
 }
 
 const char* lept_get_string(const lept_value* v) {

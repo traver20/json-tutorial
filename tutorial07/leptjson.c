@@ -23,6 +23,7 @@
 #define ISDIGIT1TO9(ch)     ((ch) >= '1' && (ch) <= '9')
 #define PUTC(c, ch)         do { *(char*)lept_context_push(c, sizeof(char)) = (ch); } while(0)
 #define PUTS(c, s, len)     memcpy(lept_context_push(c, len), s, len)
+#define ADDC(ch,p)       do { *p++=ch; cnt+=1; } while(0)
 
 typedef struct {
     const char* json;
@@ -348,9 +349,95 @@ int lept_parse(lept_value* v, const char* json) {
 
 static void lept_stringify_string(lept_context* c, const char* s, size_t len) {
     /* ... */
+    size_t i;
+    size_t cnt = 0;
+    char* p = lept_context_push(c, len * 6 + 2);
+    //PUTC(c, '\"');
+    ADDC('\"', p);
+    for (i = 0; i < len; ++i)
+    {
+        char ch = *(s + i);
+        switch (ch)
+        {
+        case '\n':
+            ADDC('\\', p);
+            ADDC('n', p);
+           /* PUTC(c, '\\');
+            PUTC(c, 'n');*/
+            break;
+        case '\\':
+            ADDC('\\', p);
+            ADDC('\\', p);
+            /*PUTC(c, '\\');
+            PUTC(c, '\\');*/
+            break;
+        case '\"':
+            ADDC('\\', p);
+            ADDC('\"', p);
+          /*  PUTC(c, '\\');
+            PUTC(c, '\"');*/
+            break;
+        case '\b':
+            ADDC('\\', p);
+            ADDC('b', p);
+            /*PUTC(c, '\\');
+            PUTC(c, 'b');*/
+            break;
+        case '\f':
+            ADDC('\\', p);
+            ADDC('f', p);
+           /* PUTC(c, '\\');
+            PUTC(c, 'f');*/
+            break;
+        case '\r':
+            ADDC('\\', p);
+            ADDC('r', p);
+            /*PUTC(c, '\\');
+            PUTC(c, 'r');*/
+            break;
+        case '\t':
+            ADDC('\\', p);
+            ADDC('t', p);
+           /* PUTC(c, '\\');
+            PUTC(c, 't');*/
+            break;
+        default:
+            if (ch < 0x20)
+            {
+                int n = ch;
+                ADDC('\\', p);
+                ADDC('u', p);
+                ADDC('0', p);
+                ADDC('0', p);
+             /*   PUTC(c, '\\');
+                PUTC(c, 'u');
+                PUTC(c, '0');
+                PUTC(c, '0');*/
+                char b2 = n / 16 + '0';
+                ADDC(b2, p);
+                //PUTC(c, b2);
+                int n1 = n % 16;
+                char b1 = n1 + '0';
+                if (n1 >= 10)
+                    b1 = n1 + 'A';
+                ADDC(b1, p);
+                //PUTC(c, b1);
+            }
+            else
+            {
+                ADDC(ch, p);
+               // PUTC(c, ch);
+            }
+            break;
+        }
+    }
+    ADDC('\"', p);
+   // PUTC(c, '\"');
+    lept_context_pop(c, len * 6 + 2 - cnt);
 }
 
 static void lept_stringify_value(lept_context* c, const lept_value* v) {
+    size_t i;
     switch (v->type) {
         case LEPT_NULL:   PUTS(c, "null",  4); break;
         case LEPT_FALSE:  PUTS(c, "false", 5); break;
@@ -359,9 +446,27 @@ static void lept_stringify_value(lept_context* c, const lept_value* v) {
         case LEPT_STRING: lept_stringify_string(c, v->u.s.s, v->u.s.len); break;
         case LEPT_ARRAY:
             /* ... */
+            PUTC(c, '[');
+            for (i = 0; i < v->u.a.size; ++i)
+            {
+                lept_stringify_value(c, lept_get_array_element(v, i));
+                if (i < v->u.a.size - 1)
+                    PUTC(c, ',');
+            }
+            PUTC(c, ']');
             break;
         case LEPT_OBJECT:
             /* ... */
+            PUTC(c, '{');
+            for (i = 0; i < v->u.o.size; ++i)
+            {
+                lept_stringify_string(c, lept_get_object_key(v, i), lept_get_object_key_length(v, i));
+                PUTC(c, ':');
+                lept_stringify_value(c, lept_get_object_value(v, i));
+                if (i < v->u.o.size - 1)
+                    PUTC(c, ',');
+            }
+            PUTC(c, '}');
             break;
         default: assert(0 && "invalid type");
     }
